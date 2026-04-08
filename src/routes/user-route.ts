@@ -2,9 +2,20 @@ import { Elysia, t } from "elysia";
 import { usersService } from "../services/users-service";
 
 export const userRoute = new Elysia({ prefix: "/api/users" })
+  // Shared logic to extract and validate session token from Bearer header
+  .derive({ as: "scoped" }, ({ headers }) => {
+    const authHeader = headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const sessionToken = authHeader.split(" ")[1];
+      if (sessionToken) {
+        return { sessionToken };
+      }
+    }
+    return { sessionToken: null };
+  })
   .post("/", async ({ body, set }) => {
     try {
-      const result = await usersService.registerUser(body);
+      const result = await usersService.registerUser(body as any);
       return result;
     } catch (error: any) {
       if (error.message === "Email already registered") {
@@ -24,7 +35,7 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
   })
   .post("/login", async ({ body, set }) => {
     try {
-      const result = await usersService.loginUser(body);
+      const result = await usersService.loginUser(body as any);
       return result;
     } catch (error: any) {
       if (error.message === "Wrong Email or Password") {
@@ -41,20 +52,13 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
       password: t.String()
     })
   })
-  .get("/current", async ({ headers, set }) => {
+  .get("/current", async ({ sessionToken, set }) => {
+    if (!sessionToken) {
+      set.status = 401;
+      return { error: "Unauthorized" };
+    }
+
     try {
-      const authHeader = headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        set.status = 401;
-        return { error: "Unauthorized" };
-      }
-
-      const sessionToken = authHeader.split(" ")[1];
-      if (!sessionToken) {
-        set.status = 401;
-        return { error: "Unauthorized" };
-      }
-
       const result = await usersService.getCurrentUser(sessionToken);
       return result;
     } catch (error: any) {
@@ -67,20 +71,13 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
       return { error: "Internal Server Error" };
     }
   })
-  .delete("/logout", async ({ headers, set }) => {
+  .delete("/logout", async ({ sessionToken, set }) => {
+    if (!sessionToken) {
+      set.status = 401;
+      return { error: "Unauthorized" };
+    }
+
     try {
-      const authHeader = headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        set.status = 401;
-        return { error: "Unauthorized" };
-      }
-
-      const sessionToken = authHeader.split(" ")[1];
-      if (!sessionToken) {
-        set.status = 401;
-        return { error: "Unauthorized" };
-      }
-
       const result = await usersService.logoutUser(sessionToken);
       return result;
     } catch (error: any) {

@@ -3,9 +3,13 @@ import { users, sessions } from "../db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
+// Payload types for better introspection and type safety
+export type RegisterPayload = typeof users.$inferInsert;
+export type LoginPayload = Pick<RegisterPayload, "email" | "password">;
+
 export const usersService = {
-  async registerUser({ name, email, password }: any) {
-    // 1. Check if email already registered
+  async registerUser({ name, email, password }: RegisterPayload) {
+    // 1. Check if email already registered (Graceful check)
     const existingUser = await db.query.users.findFirst({
       where: eq(users.email, email),
     });
@@ -18,17 +22,25 @@ export const usersService = {
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // 3. Create user
-    await db.insert(users).values({
-      name,
-      email,
-      password: hashedPassword,
-    });
+    try {
+      // 3. Create user
+      await db.insert(users).values({
+        name,
+        email,
+        password: hashedPassword,
+      });
+    } catch (error: any) {
+      // Handle race conditions (Postgres unique violation 23505)
+      if (error.code === "23505") {
+        throw new Error("Email already registered");
+      }
+      throw error;
+    }
 
     return { data: "OK" };
   },
 
-  async loginUser({ email, password }: any) {
+  async loginUser({ email, password }: LoginPayload) {
     // 1. Find user by email
     const user = await db.query.users.findFirst({
       where: eq(users.email, email),
