@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { users } from "../db/schema";
+import { users, sessions } from "../db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
@@ -26,5 +26,34 @@ export const usersService = {
     });
 
     return { data: "OK" };
+  },
+
+  async loginUser({ email, password }: any) {
+    // 1. Find user by email
+    const user = await db.query.users.findFirst({
+      where: eq(users.email, email),
+    });
+
+    if (!user) {
+      throw new Error("Wrong Email or Password");
+    }
+
+    // 2. Compare password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new Error("Wrong Email or Password");
+    }
+
+    // 3. Generate UUID token
+    const token = crypto.randomUUID();
+
+    // 4. Create session
+    await db.insert(sessions).values({
+      token,
+      email: user.email,
+      userId: user.id,
+    });
+
+    return { data: token };
   },
 };
