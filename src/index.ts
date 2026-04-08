@@ -21,7 +21,13 @@ const app = new Elysia()
         return { error: error.message };
       case "VALIDATION":
         set.status = 400;
-        return { error: "Validation failed" };
+        return { 
+          error: "Validation failed", 
+          details: error.all.map(err => ({
+            field: err.path.slice(1) || "root",
+            message: err.message
+          }))
+        };
       case "NOT_FOUND":
         set.status = 404;
         return { error: "Not Found" };
