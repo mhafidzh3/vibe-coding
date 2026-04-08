@@ -1,8 +1,10 @@
 import { Elysia } from "elysia";
 import { db } from "./db";
+import { userRoute } from "./routes/user-route";
 import { users } from "./db/schema";
 
 const app = new Elysia()
+  .use(userRoute)
   .get("/", () => ({
     status: "ok",
     message: "Bun + Elysia + Drizzle is running!",
