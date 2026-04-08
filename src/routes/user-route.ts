@@ -31,8 +31,10 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
     }
   })
   .derive({ as: "scoped" }, ({ headers }) => {
+    const authHeader = headers.authorization;
+    const token = (authHeader && authHeader.startsWith("Bearer ")) ? authHeader.split(" ")[1] : "";
     return {
-      sessionToken: headers.authorization!.split(" ")[1] as string
+      sessionToken: token as string
     };
   })
   .get("/current", ({ sessionToken }) => usersService.getCurrentUser(sessionToken))
