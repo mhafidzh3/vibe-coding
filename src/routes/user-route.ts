@@ -3,14 +3,14 @@ import { usersService } from "../services/users-service";
 import { UnauthorizedError } from "../lib/errors";
 
 const registerSchema = t.Object({
-  name: t.String(),
-  email: t.String(),
-  password: t.String()
+  name: t.String({ maxLength: 255 }),
+  email: t.String({ format: "email", maxLength: 255 }),
+  password: t.String({ minLength: 8, maxLength: 255 })
 });
 
 const loginSchema = t.Object({
-  email: t.String(),
-  password: t.String()
+  email: t.String({ format: "email", maxLength: 255 }),
+  password: t.String({ maxLength: 255 })
 });
 
 export const userRoute = new Elysia({ prefix: "/api/users" })
