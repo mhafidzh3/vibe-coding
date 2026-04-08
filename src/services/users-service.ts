@@ -86,4 +86,17 @@ export const usersService = {
       },
     };
   },
+
+  async logoutUser(sessionToken: string) {
+    // 1. Find and delete session by token
+    const result = await db.delete(sessions)
+      .where(eq(sessions.token, sessionToken))
+      .returning();
+
+    if (result.length === 0) {
+      throw new Error("Unauthorized");
+    }
+
+    return { data: "OK" };
+  },
 };
