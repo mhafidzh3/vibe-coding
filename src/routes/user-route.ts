@@ -25,6 +25,30 @@ const loginSchema = t.Object({
 });
 
 /**
+ * Response schemas for Swagger documentation.
+ */
+const registerResponseSchema = t.Object({
+  data: t.String()
+});
+
+const loginResponseSchema = t.Object({
+  data: t.String()
+});
+
+const currentUserResponseSchema = t.Object({
+  data: t.Object({
+    id: t.Number(),
+    name: t.String(),
+    email: t.String(),
+    created_at: t.Any()
+  })
+});
+
+const logoutResponseSchema = t.Object({
+  data: t.String()
+});
+
+/**
  * Main router for standard user operations:
  * - Public: Registration and Login
  * - Protected: Profile retrieval and Logout
@@ -36,13 +60,21 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
    * Expects payload mapped to registerSchema.
    */
   .post("/", ({ body }) => usersService.registerUser(body as Static<typeof registerSchema>), {
-    body: registerSchema
+    body: registerSchema,
+    response: {
+      200: registerResponseSchema
+    },
+    detail: { summary: "Register a new user" }
   })
   /**
    * Authenticate user credentials and issue an access token.
    */
   .post("/login", ({ body }) => usersService.loginUser(body as Static<typeof loginSchema>), {
-    body: loginSchema
+    body: loginSchema,
+    response: {
+      200: loginResponseSchema
+    },
+    detail: { summary: "Login to your account" }
   })
   // Protected routes
   /**
@@ -82,8 +114,18 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
    * Retrieve the currently logged-in user profile metrics.
    * Relies on the user object injected by the authorization derive.
    */
-  .get("/current", ({ user }) => usersService.getCurrentUser(user))
+  .get("/current", ({ user }) => usersService.getCurrentUser(user), {
+    response: {
+      200: currentUserResponseSchema
+    },
+    detail: { summary: "Get current user profile" }
+  })
   /**
    * Invalidate the current session and logout.
    */
-  .delete("/logout", ({ session }) => usersService.logoutUser(session.id));
+  .delete("/logout", ({ session }) => usersService.logoutUser(session.id), {
+    response: {
+      200: logoutResponseSchema
+    },
+    detail: { summary: "Logout current session" }
+  });
