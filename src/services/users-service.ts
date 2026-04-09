@@ -9,6 +9,14 @@ export type RegisterPayload = typeof users.$inferInsert;
 export type LoginPayload = Pick<RegisterPayload, "email" | "password">;
 
 export const usersService = {
+  /**
+   * Registers a new user into the database.
+   * Checks for email duplication and enforces password hashing before storage.
+   *
+   * @param payload User registration objects containing name, email, and plaintext password
+   * @throws ConflictError if the email already exists in the registry
+   * @returns Indication object `{ data: "OK" }` upon successful creation
+   */
   async registerUser({ name, email, password }: RegisterPayload) {
     const existingUser = await db.query.users.findFirst({
       where: eq(users.email, email),
@@ -37,6 +45,15 @@ export const usersService = {
     return { data: "OK" };
   },
 
+  /**
+   * Authenticates user matching email and compares against stored bcrypt hash.
+   * Generates a secure, 32-byte hex token upon successful validation.
+   * Stores the generated SHA-256 token hash alongside a 7-day expiration boundary.
+   *
+   * @param payload Object containing email and plaintext password attempts
+   * @throws BadRequestError on invalid email match or password resolution failure
+   * @returns Raw token string utilized as Bearer for downstream requests
+   */
   async loginUser({ email, password }: LoginPayload) {
     const user = await db.query.users.findFirst({
       where: eq(users.email, email),
@@ -66,6 +83,14 @@ export const usersService = {
     return { data: rawToken };
   },
 
+  /**
+   * Retrieves comprehensive user profile payload.
+   * As isolation is managed by upstream middleware, this function acts purely
+   * to construct the response map for the verified active token's owner.
+   *
+   * @param user Pre-verified user reference injected by route guard
+   * @returns Unwrapped safe response structure containing user identifiers
+   */
   async getCurrentUser(user: typeof users.$inferSelect) {
     return {
       data: {
@@ -77,6 +102,14 @@ export const usersService = {
     };
   },
 
+  /**
+   * Voids the active session record effectively revoking underlying authorization.
+   * Targets specific connection ID preventing mass-termination on multiple client layouts.
+   *
+   * @param sessionId Session PK extracted natively by route middleware
+   * @throws UnauthorizedError If session could not be found or removed effectively
+   * @returns Successful deletion object
+   */
   async logoutUser(sessionId: number) {
     const result = await db.delete(sessions)
       .where(eq(sessions.id, sessionId))
