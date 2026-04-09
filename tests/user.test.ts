@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "bun:test";
+import crypto from "crypto";
 import { app } from "../src/index";
 import { db } from "../src/db/index";
 import { users, sessions } from "../src/db/schema";
@@ -234,6 +235,36 @@ describe("User API tests", () => {
           method: "DELETE",
           headers: {
             "Authorization": `Bearer ${sessionToken}`,
+          },
+        })
+      );
+
+      expect(response.status).toBe(401);
+      const result = await response.json();
+      expect(result.error).toBe("Unauthorized");
+    });
+
+    it("should fail to access current user with an expired token", async () => {
+      // 1. Manually create an expired session
+      const expiredToken = "expired_token_123";
+      const tokenHash = crypto.createHash("sha256").update(expiredToken).digest("hex");
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - 1); // 1 day ago
+
+      const [user] = await db.query.users.findMany({ limit: 1 });
+
+      await db.insert(sessions).values({
+        tokenHash,
+        userId: user.id,
+        expiresAt: pastDate,
+      });
+
+      // 2. Try to access with expired token
+      const response = await app.handle(
+        new Request("http://localhost/api/users/current", {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${expiredToken}`,
           },
         })
       );

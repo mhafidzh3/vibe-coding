@@ -1,6 +1,10 @@
 import { Elysia, t, type Static } from "elysia";
 import { usersService } from "../services/users-service";
 import { UnauthorizedError } from "../lib/errors";
+import { db } from "../db";
+import { sessions, users } from "../db/schema";
+import { eq, and, gt } from "drizzle-orm";
+import crypto from "crypto";
 
 const registerSchema = t.Object({
   name: t.String({ maxLength: 255 }),
@@ -22,20 +26,32 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
     body: loginSchema
   })
   // Protected routes
-  .guard({
-    async beforeHandle({ headers, set }) {
-      const authHeader = headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        throw new UnauthorizedError();
-      }
-    }
-  })
-  .derive({ as: "scoped" }, ({ headers }) => {
+  .derive({ as: "scoped" }, async ({ headers }) => {
     const authHeader = headers.authorization;
     const token = (authHeader && authHeader.startsWith("Bearer ")) ? authHeader.split(" ")[1] : "";
+    
+    if (!token) throw new UnauthorizedError();
+
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const sessionWithUser = await db.query.sessions.findFirst({
+      where: and(
+        eq(sessions.tokenHash, tokenHash),
+        gt(sessions.expiresAt, new Date())
+      ),
+      with: {
+        user: true
+      }
+    });
+
+    if (!sessionWithUser || !sessionWithUser.user) {
+      throw new UnauthorizedError();
+    }
+
     return {
-      sessionToken: token as string
+      user: sessionWithUser.user,
+      session: sessionWithUser
     };
   })
-  .get("/current", ({ sessionToken }) => usersService.getCurrentUser(sessionToken))
-  .delete("/logout", ({ sessionToken }) => usersService.logoutUser(sessionToken));
+  .get("/current", ({ user }) => usersService.getCurrentUser(user))
+  .delete("/logout", ({ session }) => usersService.logoutUser(session.id));
