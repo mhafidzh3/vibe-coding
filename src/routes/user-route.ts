@@ -26,14 +26,6 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
     body: loginSchema
   })
   // Protected routes
-  .guard({
-    async beforeHandle({ headers }) {
-      const authHeader = headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        throw new UnauthorizedError();
-      }
-    }
-  })
   .derive({ as: "scoped" }, async ({ headers }) => {
     const authHeader = headers.authorization;
     const token = (authHeader && authHeader.startsWith("Bearer ")) ? authHeader.split(" ")[1] : "";
@@ -42,28 +34,23 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
 
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
 
-    const session = await db.query.sessions.findFirst({
+    const sessionWithUser = await db.query.sessions.findFirst({
       where: and(
         eq(sessions.tokenHash, tokenHash),
         gt(sessions.expiresAt, new Date())
       ),
+      with: {
+        user: true
+      }
     });
 
-    if (!session || !session.userId) {
-      throw new UnauthorizedError();
-    }
-
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, session.userId),
-    });
-
-    if (!user) {
+    if (!sessionWithUser || !sessionWithUser.user) {
       throw new UnauthorizedError();
     }
 
     return {
-      user,
-      session
+      user: sessionWithUser.user,
+      session: sessionWithUser
     };
   })
   .get("/current", ({ user }) => usersService.getCurrentUser(user))
