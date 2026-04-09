@@ -49,6 +49,23 @@ const logoutResponseSchema = t.Object({
 });
 
 /**
+ * Error schemas for Swagger documentation.
+ */
+const errorResponseSchema = t.Object({
+  error: t.String()
+});
+
+const validationErrorSchema = t.Object({
+  error: t.String(),
+  details: t.Array(
+    t.Object({
+      field: t.String(),
+      message: t.String()
+    })
+  )
+});
+
+/**
  * Main router for standard user operations:
  * - Public: Registration and Login
  * - Protected: Profile retrieval and Logout
@@ -62,7 +79,8 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
   .post("/", ({ body }) => usersService.registerUser(body as Static<typeof registerSchema>), {
     body: registerSchema,
     response: {
-      200: registerResponseSchema
+      200: registerResponseSchema,
+      400: t.Union([errorResponseSchema, validationErrorSchema])
     },
     detail: { summary: "Register a new user" }
   })
@@ -72,7 +90,8 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
   .post("/login", ({ body }) => usersService.loginUser(body as Static<typeof loginSchema>), {
     body: loginSchema,
     response: {
-      200: loginResponseSchema
+      200: loginResponseSchema,
+      400: t.Union([errorResponseSchema, validationErrorSchema])
     },
     detail: { summary: "Login to your account" }
   })
@@ -116,7 +135,8 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
    */
   .get("/current", ({ user }) => usersService.getCurrentUser(user), {
     response: {
-      200: currentUserResponseSchema
+      200: currentUserResponseSchema,
+      401: errorResponseSchema
     },
     detail: { summary: "Get current user profile" }
   })
@@ -125,7 +145,8 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
    */
   .delete("/logout", ({ session }) => usersService.logoutUser(session.id), {
     response: {
-      200: logoutResponseSchema
+      200: logoutResponseSchema,
+      401: errorResponseSchema
     },
     detail: { summary: "Logout current session" }
   });
