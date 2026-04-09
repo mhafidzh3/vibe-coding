@@ -4,7 +4,7 @@ import { userRoute } from "./routes/user-route";
 import { users } from "./db/schema";
 import { UnauthorizedError, BadRequestError, ConflictError } from "./lib/errors";
 
-const app = new Elysia()
+export const app = new Elysia()
   .error({
     UNAUTHORIZED: UnauthorizedError,
     BAD_REQUEST: BadRequestError,
@@ -49,11 +49,13 @@ const app = new Elysia()
     } catch (error) {
       return { error: "Database connection failed or not configured yet." };
     }
-  })
-  .listen(3000);
+  });
 
-console.log(
-  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
-);
+if (import.meta.main) {
+  app.listen(3000);
+  console.log(
+    `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
+  );
+}
 
 export type App = typeof app;
