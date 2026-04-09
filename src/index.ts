@@ -1,10 +1,20 @@
 import { Elysia } from "elysia";
+import { swagger } from "@elysiajs/swagger";
 import { db } from "./db";
 import { userRoute } from "./routes/user-route";
 import { users } from "./db/schema";
 import { UnauthorizedError, BadRequestError, ConflictError } from "./lib/errors";
 
 export const app = new Elysia()
+  .use(swagger({
+    documentation: {
+      info: {
+        title: "Vibe Coding API",
+        version: "1.0.0",
+        description: "Secure, performant User Authentication API with session management."
+      }
+    }
+  }))
   .error({
     UNAUTHORIZED: UnauthorizedError,
     BAD_REQUEST: BadRequestError,
