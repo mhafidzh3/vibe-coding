@@ -2,6 +2,7 @@ import { db } from "../db";
 import { users, sessions } from "../db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import { UnauthorizedError, BadRequestError, ConflictError } from "../lib/errors";
 
 export type RegisterPayload = typeof users.$inferInsert;
@@ -50,34 +51,22 @@ export const usersService = {
       throw new BadRequestError("Wrong Email or Password");
     }
 
-    const token = crypto.randomUUID();
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
 
     await db.insert(sessions).values({
-      token,
-      email: user.email,
+      tokenHash,
       userId: user.id,
+      expiresAt,
     });
 
-    return { data: token };
+    return { data: rawToken };
   },
 
-  async getCurrentUser(sessionToken: string) {
-    const session = await db.query.sessions.findFirst({
-      where: eq(sessions.token, sessionToken),
-    });
-
-    if (!session) {
-      throw new UnauthorizedError();
-    }
-
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, session.userId),
-    });
-
-    if (!user) {
-      throw new UnauthorizedError();
-    }
-
+  async getCurrentUser(user: typeof users.$inferSelect) {
     return {
       data: {
         id: user.id,
@@ -88,9 +77,9 @@ export const usersService = {
     };
   },
 
-  async logoutUser(sessionToken: string) {
+  async logoutUser(sessionId: number) {
     const result = await db.delete(sessions)
-      .where(eq(sessions.token, sessionToken))
+      .where(eq(sessions.id, sessionId))
       .returning();
 
     if (result.length === 0) {
