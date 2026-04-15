@@ -47,7 +47,6 @@ export const app = new Elysia()
         return { error: "Internal Server Error" };
     }
   })
-  .use(userRoute)
   .get("/", () => ({
     status: "ok",
     message: "Bun + Elysia + Drizzle is running!",
@@ -59,7 +58,9 @@ export const app = new Elysia()
     } catch (error) {
       return { error: "Database connection failed or not configured yet." };
     }
-  });
+  })
+  .use(userRoute);
+
 
 if (import.meta.main) {
   app.listen(3000);
