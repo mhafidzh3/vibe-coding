@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Card,
   CardContent,
@@ -32,9 +32,12 @@ export default function NotFoundPage() {
           </p>
         </CardContent>
         <CardFooter className="flex justify-center">
-          <Button asChild>
-            <Link to="/dashboard">Go back to Dashboard</Link>
-          </Button>
+          <Link
+            to="/dashboard"
+            className={buttonVariants({ variant: "default" })}
+          >
+            Go back to Dashboard
+          </Link>
         </CardFooter>
       </Card>
     </div>

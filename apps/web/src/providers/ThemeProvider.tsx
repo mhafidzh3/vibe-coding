@@ -1,13 +1,5 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-
-type Theme = "light" | "dark" | "system";
-
-interface ThemeContextType {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
-}
-
-const ThemeContext = createContext<ThemeContextType | null>(null);
+import { useState, useEffect, type ReactNode } from "react";
+import { ThemeContext, type Theme } from "./ThemeContext";
 
 const THEME_KEY = "vibe_theme";
 
@@ -49,19 +41,4 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       {children}
     </ThemeContext.Provider>
   );
-}
-
-/**
- * Hook to access and change the current theme.
- *
- * Usage:
- * const { theme, setTheme } = useTheme();
- * setTheme("dark");
- */
-export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error("useTheme must be used within a ThemeProvider");
-  }
-  return context;
 }
