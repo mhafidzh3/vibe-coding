@@ -45,8 +45,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+      {/* App branding */}
+      <div className="mb-8 text-center">
+        <h1 className="text-3xl font-bold tracking-tight text-primary">
+          Vibe Coding
+        </h1>
+      </div>
+
+      <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
           <CardDescription>
