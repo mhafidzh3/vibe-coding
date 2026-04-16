@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "bun run --filter '*' dev",
     "dev:api": "bun run --filter @vibe/api dev",
-    "dev:web": "bun run --filter @vibe/web dev"
+    "dev:web": "bun run --filter @vibe/web dev",
+    "stop": "powershell -ExecutionPolicy Bypass -File scripts/stop.ps1",
+    "predev": "bun run stop"
   }
 }
