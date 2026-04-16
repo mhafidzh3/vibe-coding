@@ -1,124 +1,199 @@
-# Vibe Coding - Secure User Authenticated API
+# Vibe Coding
 
-A secure, highly-performant backend REST API built with Bun, Elysia, and Drizzle ORM. The application is designed to manage user registrations, authenticate profiles, and securely manage access sessions utilizing token hashing and expiration limits.
+A full-stack application featuring a secure REST API backend and a modern React frontend. Built to demonstrate a monorepo structure with a Bun-powered API and a Vite-powered web app.
+
+---
 
 ## 🚀 Technology Stack
 
-- **Runtime Environment:** [Bun](https://bun.sh/)
+### Backend (`apps/api`)
+- **Runtime:** [Bun](https://bun.sh/)
 - **Web Framework:** [ElysiaJS](https://elysiajs.com/)
-- **ORM (Object Relational Mapping):** [Drizzle ORM](https://orm.drizzle.team/)
+- **ORM:** [Drizzle ORM](https://orm.drizzle.team/)
 - **Database:** PostgreSQL
+- **Key Libraries:** `bcrypt` (password hashing), `postgres` (DB client), `bun:test` (testing)
 
-### Key Libraries
-- `elysia` — For fast, declarative routing and runtime type validation.
-- `drizzle-orm` / `drizzle-kit` — For strictly typed database schema generation and interactions.
-- `bcrypt` — For securely hashing and verifying passwords.
-- `postgres` — PostgreSQL client for Node/Bun.
-- `bun:test` — Built-in, ultra-fast test runner handling the API integration tests.
+### Frontend (`apps/web`)
+- **Build Tool:** [Vite](https://vitejs.dev/)
+- **UI Framework:** [React 19](https://react.dev/)
+- **Language:** TypeScript
+- **Styling:** [Tailwind CSS v4](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/) components (powered by Base UI)
+- **Routing:** [React Router v7](https://reactrouter.com/)
+- **Forms:** [React Hook Form](https://react-hook-form.com/) + [Zod](https://zod.dev/)
+- **API Client:** [Eden Treaty](https://elysiajs.com/eden/treaty/overview.html) (type-safe, end-to-end)
 
 ---
 
 ## 🏗️ Architecture & File Structure
 
-The codebase is organized into layered conceptual boundaries handling routing, business logic execution, and database definitions:
+This is a **Bun Workspace monorepo** with two applications under the `apps/` directory.
 
 ```text
 /
-├── src/
-│   ├── db/
-│   │   ├── index.ts           // Driver initialization and DB connection
-│   │   └── schema.ts          // Core mapping of tables (users, sessions) and relations
-│   ├── lib/
-│   │   └── errors.ts          // Standardized custom Error classes (e.g. UnauthorizedError)
-│   ├── routes/
-│   │   └── user-route.ts      // Elysia routing, authentication middleware, and validation schemas
-│   ├── services/
-│   │   └── users-service.ts   // Business logic layer executing database actions
-│   └── index.ts               // Application entry point configuring global error handling
-├── tests/
-│   └── user.test.ts           // Integrated E2E application testing specifications
-├── drizzle/                   // Persistent storage of SQL migration snapshots
-├── package.json
-└── tsconfig.json
+├── apps/
+│   ├── api/                          // Backend application
+│   │   ├── src/
+│   │   │   ├── db/
+│   │   │   │   ├── index.ts          // DB connection driver
+│   │   │   │   └── schema.ts         // Drizzle table schemas (users, sessions)
+│   │   │   ├── lib/
+│   │   │   │   └── errors.ts         // Custom error classes
+│   │   │   ├── routes/
+│   │   │   │   └── user-route.ts     // Elysia routing, middleware, and validation
+│   │   │   ├── services/
+│   │   │   │   └── users-service.ts  // Business logic layer
+│   │   │   └── index.ts              // API entry point
+│   │   └── tests/
+│   │       └── user.test.ts          // E2E API integration tests
+│   │
+│   └── web/                          // Frontend application
+│       └── src/
+│           ├── components/
+│           │   ├── ui/               // shadcn/ui primitives (Button, Card, etc.)
+│           │   ├── Header.tsx        // App header with profile dropdown & theme toggle
+│           │   ├── LoadingScreen.tsx // Full-screen loading spinner
+│           │   ├── ErrorFallback.tsx // Error Boundary fallback UI
+│           │   ├── ProtectedRoute.tsx    // Route guard for authenticated users
+│           │   └── PublicOnlyRoute.tsx   // Route guard for unauthenticated users
+│           ├── lib/
+│           │   ├── auth.ts           // localStorage token store
+│           │   ├── eden.ts           // Type-safe Eden Treaty API client
+│           │   ├── schemas.ts        // Zod validation schemas for forms
+│           │   └── utils.ts          // Utility functions (cn)
+│           ├── pages/
+│           │   ├── LoginPage.tsx     // Login form
+│           │   ├── RegisterPage.tsx  // Registration form
+│           │   ├── DashboardPage.tsx // User profile dashboard
+│           │   └── NotFoundPage.tsx  // 404 page
+│           ├── providers/
+│           │   ├── AuthContext.tsx   // Auth context definition & useAuth hook
+│           │   ├── AuthProvider.tsx  // Auth state manager (login, logout, session)
+│           │   ├── ThemeContext.tsx  // Theme context definition & useTheme hook
+│           │   └── ThemeProvider.tsx // Theme manager (light/dark/system)
+│           ├── App.tsx               // Root component, routing, and provider setup
+│           └── main.tsx              // Application entry point
+├── package.json                      // Root workspace config & scripts
+└── bun.lock
 ```
 
 ---
 
 ## 💾 Database Schema
 
-The database relies on establishing relation-mapped tables optimizing lookup queries:
-
-1. **`users` Table**: Stores authenticated profiles.
+1. **`users` Table**: Stores user profiles.
    - `id` *(Serial, PK)*
    - `name` *(Text)*
-   - `email` *(Varchar, Unique Limit)*
-   - `password` *(Varchar, Hashed via Bcrypt)*
+   - `email` *(Varchar, Unique)*
+   - `password` *(Varchar, bcrypt hashed)*
    - `createdAt` *(Timestamp)*
 
-2. **`sessions` Table**: Manages authorized tokens correlating to users.
+2. **`sessions` Table**: Manages authentication tokens.
    - `id` *(Serial, PK)*
-   - `tokenHash` *(Varchar)* — Storing SHA-256 tokens rather than plaintext.
-   - `userId` *(Serial, FK references users.id)*
-   - `expiresAt` *(Timestamp)* — Defined lifespan (7 Days configuration limit).
+   - `tokenHash` *(Varchar)* — SHA-256 hashed token, never stored in plaintext.
+   - `userId` *(Serial, FK → users.id)*
+   - `expiresAt` *(Timestamp)* — 7-day expiry.
    - `createdAt` *(Timestamp)*
 
 ---
 
-## 🔌 Available API
+## 🔌 Available API Endpoints
 
-The following RESTful endpoints are exposed by the server. 
-**Note:** Protected endpoints require supplying the `Authorization` header utilizing the Bearer format (`Bearer <YOUR_TOKEN>`).
+**Base URL:** `http://localhost:9001`
 
-| HTTP Method | Endpoint | Description | Auth Required |
+> Protected endpoints require the `Authorization: Bearer <TOKEN>` header.
+
+| Method | Endpoint | Description | Auth |
 |:---:|:---|:---|:---:|
-| `POST` | `/api/users/` | Registers a new user. Returns `{ data: "OK" }` | No |
-| `POST` | `/api/users/login` | Logins and creates an active session. Returns token. | No |
-| `GET` | `/api/users/current` | Retrieves the profile data for the authenticated account. | **Yes** |
-| `DELETE` | `/api/users/logout` | Terminates the current active session token for the user. | **Yes** |
-
-*(There are also diagnostic routes available at `/` and `/users`.)*
+| `POST` | `/api/users/` | Register a new user | No |
+| `POST` | `/api/users/login` | Log in and receive a session token | No |
+| `GET` | `/api/users/current` | Get the currently authenticated user's profile | **Yes** |
+| `DELETE` | `/api/users/logout` | Invalidate the current session token | **Yes** |
 
 ---
 
-## ⚙️ How to Setup the Project
+## ⚙️ Setup
 
-1. **Clone the repository** to your local machine.
-2. **Install all package dependencies** utilizing Bun's fast installer:
+### Prerequisites
+- [Bun](https://bun.sh/) `>= 1.0`
+- A running **PostgreSQL** instance
+
+### Steps
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/mhafidzh3/vibe-coding.git
+   cd vibe-coding
+   ```
+
+2. **Install all dependencies** (installs for all workspaces at once):
    ```bash
    bun install
    ```
-3. **Configure the Environment**:
-   Duplicate the `.env.example` file and rename it directly to `.env`. Update the `DATABASE_URL` entry matching your local PostgreSQL instance:
+
+3. **Configure the environment:**
+   Duplicate `.env.example` and rename it to `.env` inside `apps/api/`. Update the connection string:
    ```bash
    DATABASE_URL="postgresql://username:password@localhost:5432/vibe_db"
    ```
-4. **Push Database Migrations**:
-   Synchronize your configured empty database with the Drizzle schema directly:
+
+4. **Run database migrations:**
    ```bash
    bun run db:push
    ```
+   > Run this from the `apps/api/` directory, or add a root-level script if needed.
 
 ---
 
-## 🏃🏿‍♂️ How to Run the Application
+## 🏃 How to Run
 
-Execute the Bun development server which utilizes Hot Module Reloading (HMR) to watch for file changes automatically:
+All commands are run from the **project root**.
 
+### Run everything (API + Web) simultaneously:
 ```bash
 bun run dev
 ```
-You will receive console feedback indicating `🦊 Elysia is running at localhost:3000`.
+
+### Run only the API backend:
+```bash
+bun run dev:api
+```
+The API will be available at `http://localhost:9001`.
+
+### Run only the Web frontend:
+```bash
+bun run dev:web
+```
+The web app will be available at `http://localhost:9000`.
+
+### Stop and Clean Up Ports
+If you encounter "Port already in use" errors or need to shut down the background processes completely:
+```bash
+bun run stop
+```
+*Note: This command is Windows-specific and uses PowerShell to clear ports 9000 and 9001.*
+
+> **Note:** The frontend uses a Vite proxy to forward `/api/*` requests to the API server. Both must be running for the full application to work correctly.
 
 ---
 
-## 🧪 How to Test the Application
+## 🧪 How to Test
 
-System-level behavior validation integrates deeply into Elysia's `app.handle` mock environments. The integration specifications verify registration limits, validation, standard token logic, and strict expiration rules.
-
-Execute the integrated test runner:
+Integration tests run against the API using Bun's built-in test runner.
 
 ```bash
 bun test
 ```
+> Run from the `apps/api/` directory.
 
-*Note: Ensure your targeted `.env` database instance allows deletion actions as the tests will destruct table objects repeatedly through the `beforeEach` hook setups.*
+> **Note:** Ensure your `.env` database allows destructive operations, as tests clear and recreate table data in `beforeEach` hooks.
+
+---
+
+## 🌐 Frontend Features
+
+- 🔐 **Authentication**: Register, login, and persistent sessions via `localStorage`.
+- 🌗 **Dark/Light/System Theme**: Persistent theme selection across sessions.
+- 🛡️ **Route Guards**: Protected and public-only routes prevent unauthorized access.
+- 📋 **Form Validation**: Inline validation powered by React Hook Form + Zod.
+- 💥 **Error Boundary**: App-level crash protection with a friendly recovery UI.
+- 📄 **404 Page**: Proper not-found experience instead of silent redirects.

@@ -1,4 +1,5 @@
 import { Elysia } from "elysia";
+import { cors } from "@elysiajs/cors";
 import { swagger } from "@elysiajs/swagger";
 import { db } from "./db";
 import { userRoute } from "./routes/user-route";
@@ -6,6 +7,7 @@ import { users } from "./db/schema";
 import { UnauthorizedError, BadRequestError, ConflictError } from "./lib/errors";
 
 export const app = new Elysia()
+  .use(cors())
   .use(swagger({
     documentation: {
       info: {
@@ -63,7 +65,7 @@ export const app = new Elysia()
 
 
 if (import.meta.main) {
-  app.listen(3000);
+  app.listen({ port: 9001, hostname: "0.0.0.0" });
   console.log(
     `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
   );
