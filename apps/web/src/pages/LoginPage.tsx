@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/providers/AuthProvider";
+import { loginSchema, type LoginFormValues } from "@/lib/schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,33 +18,30 @@ import {
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, isAuthenticated } = useAuth();
+  const { login } = useAuth();
+  const [serverError, setServerError] = useState("");
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
 
-  // If already logged in, redirect to dashboard
-  if (isAuthenticated) {
-    navigate("/dashboard", { replace: true });
-    return null;
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setIsSubmitting(true);
-
-    const result = await login(email, password);
+  async function onSubmit(data: LoginFormValues) {
+    setServerError("");
+    const result = await login(data.email, data.password);
 
     if (result.success) {
       navigate("/dashboard", { replace: true });
     } else {
-      setError(result.error || "Login failed");
+      setServerError(result.error || "Login failed");
     }
-
-    setIsSubmitting(false);
   }
 
   return (
@@ -60,12 +60,12 @@ export default function LoginPage() {
             Sign in to your Vibe Coding account
           </CardDescription>
         </CardHeader>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit(onSubmit)}>
           <CardContent className="space-y-4">
-            {/* Error message banner */}
-            {error && (
+            {/* Server error message banner */}
+            {serverError && (
               <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
+                {serverError}
               </div>
             )}
 
@@ -76,11 +76,13 @@ export default function LoginPage() {
                 id="email"
                 type="email"
                 placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
+                {...register("email")}
                 autoComplete="email"
+                className={errors.email ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {errors.email && (
+                <p className="text-xs text-destructive">{errors.email.message}</p>
+              )}
             </div>
 
             {/* Password field */}
@@ -90,11 +92,13 @@ export default function LoginPage() {
                 id="password"
                 type="password"
                 placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
+                {...register("password")}
                 autoComplete="current-password"
+                className={errors.password ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {errors.password && (
+                <p className="text-xs text-destructive">{errors.password.message}</p>
+              )}
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">

@@ -2,11 +2,15 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/providers/AuthProvider";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { PublicOnlyRoute } from "@/components/PublicOnlyRoute";
 import { Toaster } from "@/components/ui/sonner";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { ErrorBoundary } from "react-error-boundary";
+import { ErrorFallback } from "@/components/ErrorFallback";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
 import DashboardPage from "@/pages/DashboardPage";
+import NotFoundPage from "@/pages/NotFoundPage";
 
 function AppRoutes() {
   const { isLoading } = useAuth();
@@ -18,8 +22,22 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      <Route
+        path="/login"
+        element={
+          <PublicOnlyRoute>
+            <LoginPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/register"
+        element={
+          <PublicOnlyRoute>
+            <RegisterPage />
+          </PublicOnlyRoute>
+        }
+      />
 
       {/* Protected routes */}
       <Route
@@ -31,8 +49,8 @@ function AppRoutes() {
         }
       />
 
-      {/* Catch-all: redirect to login */}
-      <Route path="*" element={<Navigate to="/login" replace />} />
+      {/* Catch-all: 404 page */}
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
@@ -42,7 +60,9 @@ function App() {
     <ThemeProvider>
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
+          <ErrorBoundary FallbackComponent={ErrorFallback}>
+            <AppRoutes />
+          </ErrorBoundary>
           <Toaster />
         </AuthProvider>
       </BrowserRouter>

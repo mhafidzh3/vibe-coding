@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/providers/AuthProvider";
+import { registerSchema, type RegisterFormValues } from "@/lib/schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,45 +19,32 @@ import { toast } from "sonner";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const { register, isAuthenticated } = useAuth();
+  const { register: registerUser } = useAuth();
+  const [serverError, setServerError] = useState("");
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<RegisterFormValues>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+    },
+  });
 
-  // If already logged in, redirect to dashboard
-  if (isAuthenticated) {
-    navigate("/dashboard", { replace: true });
-    return null;
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-
-    // Client-side validation: password must be at least 8 characters
-    // (matches the backend's registerSchema validation)
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    const result = await register(name, email, password);
+  async function onSubmit(data: RegisterFormValues) {
+    setServerError("");
+    const result = await registerUser(data.name, data.email, data.password);
 
     if (result.success) {
-      // Registration successful — redirect to login page
-      // so the user can sign in with their new account
       toast.success("Account created! Please sign in.");
       navigate("/login", { replace: true });
     } else {
-      setError(result.error || "Registration failed");
+      setServerError(result.error || "Registration failed");
     }
-
-    setIsSubmitting(false);
   }
 
   return (
@@ -71,12 +61,12 @@ export default function RegisterPage() {
           <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
           <CardDescription>Get started with Vibe Coding</CardDescription>
         </CardHeader>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit(onSubmit)}>
           <CardContent className="space-y-4">
-            {/* Error message banner */}
-            {error && (
+            {/* Server error message banner */}
+            {serverError && (
               <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
+                {serverError}
               </div>
             )}
 
@@ -87,11 +77,13 @@ export default function RegisterPage() {
                 id="name"
                 type="text"
                 placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
+                {...register("name")}
                 autoComplete="name"
+                className={errors.name ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {errors.name && (
+                <p className="text-xs text-destructive">{errors.name.message}</p>
+              )}
             </div>
 
             {/* Email field */}
@@ -101,11 +93,13 @@ export default function RegisterPage() {
                 id="email"
                 type="email"
                 placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
+                {...register("email")}
                 autoComplete="email"
+                className={errors.email ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {errors.email && (
+                <p className="text-xs text-destructive">{errors.email.message}</p>
+              )}
             </div>
 
             {/* Password field */}
@@ -115,12 +109,13 @@ export default function RegisterPage() {
                 id="password"
                 type="password"
                 placeholder="Minimum 8 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
+                {...register("password")}
                 autoComplete="new-password"
+                className={errors.password ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {errors.password && (
+                <p className="text-xs text-destructive">{errors.password.message}</p>
+              )}
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">

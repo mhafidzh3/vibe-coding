@@ -1,6 +1,6 @@
 import { useAuth } from "@/providers/AuthProvider";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -52,14 +52,17 @@ export function Header() {
           
           {user && (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-                  <Avatar className="h-9 w-9">
-                    <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                      {getInitials(user.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                </Button>
+              <DropdownMenuTrigger
+                className={buttonVariants({
+                  variant: "ghost",
+                  className: "relative h-9 w-9 rounded-full px-0",
+                })}
+              >
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                    {getInitials(user.name)}
+                  </AvatarFallback>
+                </Avatar>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel className="font-normal">
