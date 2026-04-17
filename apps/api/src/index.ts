@@ -5,9 +5,26 @@ import { db } from "./db";
 import { userRoute } from "./routes/user-route";
 import { users } from "./db/schema";
 import { UnauthorizedError, BadRequestError, ConflictError } from "./lib/errors";
+import { logger } from "./lib/logger";
 
 export const app = new Elysia()
   .use(cors())
+  // Structured logging middleware
+  .onBeforeHandle(({ request }) => {
+    (request as any).startTime = Date.now();
+  })
+  .onAfterHandle(({ request, set }) => {
+    const start = (request as any).startTime || Date.now();
+    const duration = Date.now() - start;
+    const url = new URL(request.url);
+    
+    logger.info({
+      method: request.method,
+      path: url.pathname,
+      status: set.status,
+      duration: `${duration}ms`,
+    }, `HTTP ${request.method} ${url.pathname}`);
+  })
   .use(swagger({
     documentation: {
       info: {
@@ -44,7 +61,7 @@ export const app = new Elysia()
         set.status = 404;
         return { error: "Not Found" };
       default:
-        console.error(error);
+        logger.error({ error }, "Unhandled server error");
         set.status = 500;
         return { error: "Internal Server Error" };
     }
@@ -66,7 +83,7 @@ export const app = new Elysia()
 
 if (import.meta.main) {
   app.listen({ port: 9001, hostname: "0.0.0.0" });
-  console.log(
+  logger.info(
     `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`
   );
 }
