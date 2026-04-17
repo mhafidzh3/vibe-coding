@@ -39,5 +39,6 @@ export const api = treaty<App>(window.location.origin, {
     }
 
     return response;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }) as any,
 });
