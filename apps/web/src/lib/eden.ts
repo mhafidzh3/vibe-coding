@@ -31,6 +31,10 @@ export const api = treaty<App>(window.location.origin, {
       if (refreshResponse.ok) {
         // Session successfully refreshed, retry the original request once
         response = await fetch(input, requestInit);
+      } else if (refreshResponse.status === 401) {
+        // Fatal session loss: refresh token is invalid/expired
+        // Dispatch global event for AuthProvider to handle
+        window.dispatchEvent(new CustomEvent("auth:unauthorized"));
       }
     }
 
