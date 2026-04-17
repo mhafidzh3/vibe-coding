@@ -1,10 +1,39 @@
 import { treaty } from "@elysiajs/eden";
 import type { App } from "../../../api/src/index";
 
-// During development, the Vite proxy forwards /api/* to localhost:3000
-// so we use an empty string (relative URL) as the base
+/**
+ * Enhanced Eden Treaty client with automatic session refreshing.
+ * Intercepts 401 Unauthorized errors and attempts to rotate the 15-minute 
+ * access token using the HttpOnly refresh token before failing the request.
+ */
 export const api = treaty<App>(window.location.origin, {
-  fetch: {
-    credentials: "include",
-  },
+// Inject custom fetcher to handle 401 interception and retry logic
+  fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
+    // Ensure all requests include credentials (cookies) by default
+    const requestInit = { ...init, credentials: "include" as const };
+    
+    let response = await fetch(input, requestInit);
+
+    const url = input.toString();
+    
+    // If the request fails with 401 and it's not an authentication attempt itself
+    if (
+      response.status === 401 &&
+      !url.includes("/api/users/login") &&
+      !url.includes("/api/users/refresh")
+    ) {
+      // Attempt to refresh the access token
+      const refreshResponse = await fetch(`${window.location.origin}/api/users/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (refreshResponse.ok) {
+        // Session successfully refreshed, retry the original request once
+        response = await fetch(input, requestInit);
+      }
+    }
+
+    return response;
+  }) as any,
 });

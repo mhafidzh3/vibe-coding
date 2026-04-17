@@ -5,6 +5,7 @@ import { db } from "../db";
 import { sessions, users } from "../db/schema";
 import { eq, and, gt } from "drizzle-orm";
 import crypto from "crypto";
+import { rateLimit } from "elysia-rate-limit";
 
 /**
  * Registration request body validation schema.
@@ -71,6 +72,18 @@ const validationErrorSchema = t.Object({
  * - Protected: Profile retrieval and Logout
  */
 export const userRoute = new Elysia({ prefix: "/api/users" })
+  .use(rateLimit({ 
+    max: 100, 
+    duration: 60000,
+    generator: (req, server) => {
+        // Fallback for tests or environments without real IP
+        return (server?.requestIP(req)?.address) || req.headers.get("x-forwarded-for") || "127.0.0.1";
+    },
+    errorResponse: new Response(
+        JSON.stringify({ error: "Rate limit exceeded" }), 
+        { status: 429, headers: { "Content-Type": "application/json" } }
+    )
+  }))
   // Public routes
   /**
    * Register a new user.
@@ -85,16 +98,25 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
     detail: { summary: "Register a new user" }
   })
   /**
-   * Authenticate user credentials and issue an access token.
+   * Authenticate user credentials and issue access/refresh tokens.
    */
-  .post("/login", async ({ body, cookie: { auth_token } }) => {
-    const { token } = await usersService.loginUser(body as Static<typeof loginSchema>);
+  .post("/login", async ({ body, cookie: { auth_token, refresh_token } }) => {
+    const { accessToken, refreshToken } = await usersService.loginUser(body as Static<typeof loginSchema>);
     
     auth_token!.set({
-      value: token,
+      value: accessToken,
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      maxAge: 7 * 86400,
+      maxAge: 15 * 60, // 15 minutes
+      path: "/",
+      sameSite: "lax"
+    });
+
+    refresh_token!.set({
+      value: refreshToken,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 7 * 86400, // 7 days
       path: "/",
       sameSite: "lax"
     });
@@ -107,6 +129,42 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
       400: t.Union([errorResponseSchema, validationErrorSchema])
     },
     detail: { summary: "Login to your account" }
+  })
+  /**
+    * Refresh the session using the Refresh Token.
+    * Uses Token Rotation to issue new set of tokens.
+    */
+  .post("/refresh", async ({ cookie: { auth_token, refresh_token } }) => {
+      const currentRefreshToken = refresh_token?.value as string;
+      if (!currentRefreshToken) throw new UnauthorizedError("Refresh token missing");
+
+      const { accessToken, refreshToken } = await usersService.refreshSession(currentRefreshToken);
+
+      auth_token!.set({
+          value: accessToken,
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          maxAge: 15 * 60,
+          path: "/",
+          sameSite: "lax"
+      });
+
+      refresh_token!.set({
+          value: refreshToken,
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          maxAge: 7 * 86400,
+          path: "/",
+          sameSite: "lax"
+      });
+
+      return { message: "Session refreshed" };
+  }, {
+      response: {
+          200: t.Object({ message: t.String() }),
+          401: errorResponseSchema
+      },
+      detail: { summary: "Refresh session tokens" }
   })
   // Protected routes
   /**
@@ -155,9 +213,10 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
   /**
    * Invalidate the current session and logout.
    */
-  .delete("/logout", async ({ session, cookie: { auth_token } }) => {
+  .delete("/logout", async ({ session, cookie: { auth_token, refresh_token } }) => {
     const result = await usersService.logoutUser(session.id);
     auth_token!.remove();
+    refresh_token!.remove();
     return result;
   }, {
     response: {
