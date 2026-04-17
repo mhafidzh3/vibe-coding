@@ -11,16 +11,16 @@ A full-stack application featuring a secure REST API backend and a modern React 
 - **Web Framework:** [ElysiaJS](https://elysiajs.com/)
 - **ORM:** [Drizzle ORM](https://orm.drizzle.team/)
 - **Database:** PostgreSQL
-- **Key Libraries:** `bcrypt` (password hashing), `postgres` (DB client), `bun:test` (testing)
+- **Security:** `elysia-rate-limit` (brute-force protection), `bcrypt` (password hashing)
+- **Logging:** `pino` (structured JSON logging) + `pino-pretty` (readable dev logs)
 
 ### Frontend (`apps/web`)
 - **Build Tool:** [Vite](https://vitejs.dev/)
 - **UI Framework:** [React 19](https://react.dev/)
-- **Language:** TypeScript
-- **Styling:** [Tailwind CSS v4](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/) components (powered by Base UI)
-- **Routing:** [React Router v7](https://reactrouter.com/)
-- **Forms:** [React Hook Form](https://react-hook-form.com/) + [Zod](https://zod.dev/)
-- **API Client:** [Eden Treaty](https://elysiajs.com/eden/treaty/overview.html) (type-safe, end-to-end)
+- **Styling:** [Tailwind CSS v4](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
+- **Routing:** [React Router v7](https://reactrouter.com/) (with **Lazy Loading**)
+- **UX:** UI Skeletons for perceived performance
+- **API Client:** [Eden Treaty](https://elysiajs.com/eden/treaty/overview.html) with **Auto-Refresh Interceptor**
 
 ---
 
@@ -30,170 +30,109 @@ This is a **Bun Workspace monorepo** with two applications under the `apps/` dir
 
 ```text
 /
+├── .github/workflows/
+│   └── ci.yml                        // GitHub Actions CI Pipeline
 ├── apps/
 │   ├── api/                          // Backend application
 │   │   ├── src/
 │   │   │   ├── db/
 │   │   │   │   ├── index.ts          // DB connection driver
-│   │   │   │   └── schema.ts         // Drizzle table schemas (users, sessions)
+│   │   │   │   └── schema.ts         // Drizzle table schemas with indexing
 │   │   │   ├── lib/
-│   │   │   │   └── errors.ts         // Custom error classes
+│   │   │   │   ├── errors.ts         // Custom error classes
+│   │   │   │   └── logger.ts         // Structured Pino logger
 │   │   │   ├── routes/
-│   │   │   │   └── user-route.ts     // Elysia routing, middleware, and validation
+│   │   │   │   └── user-route.ts     // Rate-limited routing & HttpOnly cookies
 │   │   │   ├── services/
-│   │   │   │   └── users-service.ts  // Business logic layer
-│   │   │   └── index.ts              // API entry point
+│   │   │   │   └── users-service.ts  // Logic for Dual-Token Auth & Rotation
+│   │   │   └── index.ts              // API entry point with HTTP logger
 │   │   └── tests/
-│   │       └── user.test.ts          // E2E API integration tests
+│   │       └── user.test.ts          // Integration tests for Security & Auth
 │   │
 │   └── web/                          // Frontend application
 │       └── src/
 │           ├── components/
-│           │   ├── ui/               // shadcn/ui primitives (Button, Card, etc.)
-│           │   ├── Header.tsx        // App header with profile dropdown & theme toggle
-│           │   ├── LoadingScreen.tsx // Full-screen loading spinner
-│           │   ├── ErrorFallback.tsx // Error Boundary fallback UI
-│           │   ├── ProtectedRoute.tsx    // Route guard for authenticated users
-│           │   └── PublicOnlyRoute.tsx   // Route guard for unauthenticated users
+│           │   ├── ui/               // UI primitives including Skeleton
+│           │   ├── DashboardSkeleton.tsx // Structural page wireframe
+│           │   ├── ProtectedRoute.tsx    // Auth guard
+│           │   └── ...
 │           ├── lib/
-│           │   ├── auth.ts           // localStorage token store
-│           │   ├── eden.ts           // Type-safe Eden Treaty API client
-│           │   ├── schemas.ts        // Zod validation schemas for forms
-│           │   └── utils.ts          // Utility functions (cn)
-│           ├── pages/
-│           │   ├── LoginPage.tsx     // Login form
-│           │   ├── RegisterPage.tsx  // Registration form
-│           │   ├── DashboardPage.tsx // User profile dashboard
-│           │   └── NotFoundPage.tsx  // 404 page
+│           │   └── eden.ts           // Eden Client with 401 transparent-refresh
 │           ├── providers/
-│           │   ├── AuthContext.tsx   // Auth context definition & useAuth hook
-│           │   ├── AuthProvider.tsx  // Auth state manager (login, logout, session)
-│           │   ├── ThemeContext.tsx  // Theme context definition & useTheme hook
-│           │   └── ThemeProvider.tsx // Theme manager (light/dark/system)
-│           ├── App.tsx               // Root component, routing, and provider setup
+│           │   ├── AuthProvider.tsx  // Auth state & silent-session-cleanup
+│           │   └── ...
+│           ├── App.tsx               // Lazy Loading & Suspense setup
 │           └── main.tsx              // Application entry point
-├── package.json                      // Root workspace config & scripts
+├── package.json                      // Root scripts for project-wide lint/test
 └── bun.lock
 ```
 
 ---
 
-## 💾 Database Schema
+## 🛡️ Security Implementation
 
-1. **`users` Table**: Stores user profiles.
-   - `id` *(Serial, PK)*
-   - `name` *(Text)*
-   - `email` *(Varchar, Unique)*
-   - `password` *(Varchar, bcrypt hashed)*
-   - `createdAt` *(Timestamp)*
+This project implements a industrial-grade **Dual-Token Opaque Authentication** system:
 
-2. **`sessions` Table**: Manages authentication tokens.
-   - `id` *(Serial, PK)*
-   - `tokenHash` *(Varchar)* — SHA-256 hashed token, never stored in plaintext.
-   - `userId` *(Serial, FK → users.id)*
-   - `expiresAt` *(Timestamp)* — 7-day expiry.
-   - `createdAt` *(Timestamp)*
+1. **Access Token (`auth_token`)**: Short-lived (15 min), stored in `HttpOnly`, `Secure` cookie.
+2. **Refresh Token (`refresh_token`)**: Long-lived (7 days), stored in `HttpOnly`, `Secure` cookie.
+3. **Session Rotation**: Every token refresh invalidates the previous refresh token and issues a brand-new pair.
+4. **Opaque Strategy**: Tokens are high-entropy random strings. Only their **SHA-256 hashes** are stored in the database.
+5. **Rate Limiting**: Critical authentication routes are protected by IP-based rate limiting (configurable via `RATE_LIMIT_MAX`).
 
 ---
 
-## 🔌 Available API Endpoints
+## 🔌 API Endpoints
 
 **Base URL:** `http://localhost:9001`
 
-> Protected endpoints require the `Authorization: Bearer <TOKEN>` header.
-
-| Method | Endpoint | Description | Auth |
-|:---:|:---|:---|:---:|
-| `POST` | `/api/users/` | Register a new user | No |
-| `POST` | `/api/users/login` | Log in and receive a session token | No |
-| `GET` | `/api/users/current` | Get the currently authenticated user's profile | **Yes** |
-| `DELETE` | `/api/users/logout` | Invalidate the current session token | **Yes** |
+| Method | Endpoint | Description |
+|:---:|:---|:---|
+| `POST` | `/api/users/` | Register a new user |
+| `POST` | `/api/users/login` | Log in (sets HttpOnly cookies) |
+| `POST` | `/api/users/refresh` | Rotate session tokens |
+| `GET` | `/api/users/current` | Get current user (needs valid cookie) |
+| `DELETE` | `/api/users/logout` | Clear current session & cookies |
 
 ---
 
 ## ⚙️ Setup
 
 ### Prerequisites
-- [Bun](https://bun.sh/) `>= 1.0`
-- A running **PostgreSQL** instance
+- [Bun](https://bun.sh/) `>= 1.2`
+- Docker Desktop (for PostgreSQL)
 
 ### Steps
 
-1. **Clone the repository:**
+1. **Clone & Install:**
    ```bash
    git clone https://github.com/mhafidzh3/vibe-coding.git
    cd vibe-coding
-   ```
-
-2. **Install all dependencies** (installs for all workspaces at once):
-   ```bash
    bun install
    ```
 
-3. **Configure the environment:**
-   Duplicate `.env.example` and rename it to `.env` inside `apps/api/`. Update the connection string:
+2. **Environment:**
+   Duplicate `.env.example` in `apps/api/` and update `DATABASE_URL`.
+   Added variables:
+   - `RATE_LIMIT_MAX`: Requests per minute (default: 20).
+
+3. **Database:**
    ```bash
-   DATABASE_URL="postgresql://username:password@localhost:5432/vibe_db"
+   docker-compose up -d  # Start Postgres
+   bun run --filter @vibe/api db:push
    ```
 
-4. **Run database migrations:**
+4. **Runs:**
    ```bash
-   bun run db:push
+   bun run dev         # Run everything
+   bun run lint        # Lint whole workspace
+   bun run test        # Run E2E Backend tests
    ```
-   > Run this from the `apps/api/` directory, or add a root-level script if needed.
 
 ---
 
-## 🏃 How to Run
+## 🌐 UX & Performance Features
 
-All commands are run from the **project root**.
-
-### Run everything (API + Web) simultaneously:
-```bash
-bun run dev
-```
-
-### Run only the API backend:
-```bash
-bun run dev:api
-```
-The API will be available at `http://localhost:9001`.
-
-### Run only the Web frontend:
-```bash
-bun run dev:web
-```
-The web app will be available at `http://localhost:9000`.
-
-### Stop and Clean Up Ports
-If you encounter "Port already in use" errors or need to shut down the background processes completely:
-```bash
-bun run stop
-```
-*Note: This command is Windows-specific and uses PowerShell to clear ports 9000 and 9001.*
-
-> **Note:** The frontend uses a Vite proxy to forward `/api/*` requests to the API server. Both must be running for the full application to work correctly.
-
----
-
-## 🧪 How to Test
-
-Integration tests run against the API using Bun's built-in test runner.
-
-```bash
-bun test
-```
-> Run from the `apps/api/` directory.
-
-> **Note:** Ensure your `.env` database allows destructive operations, as tests clear and recreate table data in `beforeEach` hooks.
-
----
-
-## 🌐 Frontend Features
-
-- 🔐 **Authentication**: Register, login, and persistent sessions via `localStorage`.
-- 🌗 **Dark/Light/System Theme**: Persistent theme selection across sessions.
-- 🛡️ **Route Guards**: Protected and public-only routes prevent unauthorized access.
-- 📋 **Form Validation**: Inline validation powered by React Hook Form + Zod.
-- 💥 **Error Boundary**: App-level crash protection with a friendly recovery UI.
-- 📄 **404 Page**: Proper not-found experience instead of silent redirects.
+- ⚡ **Lazy Loading**: Route-level code splitting reduces initial load time.
+- 🖼️ **Skeletons**: Structural placeholders prevent layout shift during page loads.
+- 🔄 **Transparent Refresh**: Frontend automatically detects expired access tokens and refreshes them via the HttpOnly refresh token without user interruption.
+- 🛑 **Global Interceptor**: If a session is terminally lost, the app dispatches a global event to instantly clear UI state and redirect to login.
