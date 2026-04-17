@@ -1,0 +1,25 @@
+# Vibe Coding - Project Environment Requirements
+
+## System Dependencies
+- Bun (>= 1.2.0)
+- Node.js (>= 22.0.0)
+- Docker Desktop (for PostgreSQL)
+
+## Backend Dependencies (apps/api)
+- elysia (Web Framework)
+- drizzle-orm (ORM)
+- postgres (Database Driver)
+- pino (Structured Logging)
+- bcrypt (Security)
+- elysia-rate-limit (Security)
+
+## Frontend Dependencies (apps/web)
+- vite (Build Tool)
+- react (>= 19.x)
+- react-router (v7)
+- tailwindcss (v4)
+- shadcn/ui (UI Primitives)
+- elysiajs/eden (Type-safe API Client)
+
+## Database Requirement
+- PostgreSQL (16.x)
