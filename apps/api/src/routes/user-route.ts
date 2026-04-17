@@ -73,7 +73,7 @@ const validationErrorSchema = t.Object({
  */
 export const userRoute = new Elysia({ prefix: "/api/users" })
   .use(rateLimit({ 
-    max: 100, 
+    max: Number(process.env.RATE_LIMIT_MAX) || (process.env.NODE_ENV === "test" ? 100 : 20),
     duration: 60000,
     generator: (req, server) => {
         // Fallback for tests or environments without real IP
