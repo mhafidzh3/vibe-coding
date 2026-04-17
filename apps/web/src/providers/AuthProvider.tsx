@@ -34,9 +34,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * On mount: attempt to fetch the user profile.
    * If the auth_token cookie is present and valid, the user is logged in.
+   * Also listens for fatal session errors from the API interceptor.
    */
   useEffect(() => {
     fetchCurrentUser();
+
+    const handleUnauthorized = () => {
+      setUser(null);
+    };
+
+    window.addEventListener("auth:unauthorized", handleUnauthorized);
+
+    return () => {
+      window.removeEventListener("auth:unauthorized", handleUnauthorized);
+    };
   }, [fetchCurrentUser]);
 
   /**
