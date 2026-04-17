@@ -32,7 +32,7 @@ const registerResponseSchema = t.Object({
 });
 
 const loginResponseSchema = t.Object({
-  data: t.String()
+  message: t.String()
 });
 
 const currentUserResponseSchema = t.Object({
@@ -87,7 +87,20 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
   /**
    * Authenticate user credentials and issue an access token.
    */
-  .post("/login", ({ body }) => usersService.loginUser(body as Static<typeof loginSchema>), {
+  .post("/login", async ({ body, cookie: { auth_token } }) => {
+    const { token } = await usersService.loginUser(body as Static<typeof loginSchema>);
+    
+    auth_token!.set({
+      value: token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 7 * 86400,
+      path: "/",
+      sameSite: "lax"
+    });
+
+    return { message: "Login successful" };
+  }, {
     body: loginSchema,
     response: {
       200: loginResponseSchema,
@@ -102,9 +115,8 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
    * hash it, lookup the session safely, and assign the authenticated
    * user object directly to the request context.
    */
-  .derive({ as: "scoped" }, async ({ headers }) => {
-    const authHeader = headers.authorization;
-    const token = (authHeader && authHeader.startsWith("Bearer ")) ? authHeader.split(" ")[1] : "";
+  .derive({ as: "scoped" }, async ({ cookie: { auth_token } }) => {
+    const token = auth_token?.value as string;
     
     if (!token) throw new UnauthorizedError();
 
@@ -143,7 +155,11 @@ export const userRoute = new Elysia({ prefix: "/api/users" })
   /**
    * Invalidate the current session and logout.
    */
-  .delete("/logout", ({ session }) => usersService.logoutUser(session.id), {
+  .delete("/logout", async ({ session, cookie: { auth_token } }) => {
+    const result = await usersService.logoutUser(session.id);
+    auth_token!.remove();
+    return result;
+  }, {
     response: {
       200: logoutResponseSchema,
       401: errorResponseSchema
