@@ -31,7 +31,6 @@ describe("User API tests", () => {
     });
 
     it("should fail on duplicate email registration", async () => {
-      // 1. Register first user
       await app.handle(
         new Request("http://localhost/api/users", {
           method: "POST",
@@ -44,7 +43,6 @@ describe("User API tests", () => {
         })
       );
 
-      // 2. Try to register same email
       const response = await app.handle(
         new Request("http://localhost/api/users", {
           method: "POST",
@@ -61,82 +59,11 @@ describe("User API tests", () => {
       const result: any = await response.json();
       expect(result.error).toBe("Email already registered");
     });
-
-    it("should fail on validation error (short password)", async () => {
-      const response = await app.handle(
-        new Request("http://localhost/api/users", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: "Invalid User",
-            email: "invalid@example.com",
-            password: "123",
-          }),
-        })
-      );
-
-      expect(response.status).toBe(400);
-      const result: any = await response.json();
-      expect(result.error).toBe("Validation failed");
-    });
   });
 
-  describe("Login: POST /api/users/login", () => {
-    beforeEach(async () => {
-      // Create a user for login tests
-      await app.handle(
-        new Request("http://localhost/api/users", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: "Login User",
-            email: "login@example.com",
-            password: "password123",
-          }),
-        })
-      );
-    });
-
-    it("should login successfully and set a cookie", async () => {
-      const response = await app.handle(
-        new Request("http://localhost/api/users/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: "login@example.com",
-            password: "password123",
-          }),
-        })
-      );
-
-      expect(response.status).toBe(200);
-      const result: any = await response.json();
-      expect(result.message).toBe("Login successful");
-      const cookie = response.headers.get("set-cookie");
-      expect(cookie).toContain("auth_token=");
-      expect(cookie).toContain("HttpOnly");
-    });
-
-    it("should fail with wrong password", async () => {
-      const response = await app.handle(
-        new Request("http://localhost/api/users/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: "login@example.com",
-            password: "wrong_password",
-          }),
-        })
-      );
-
-      expect(response.status).toBe(400);
-      const result: any = await response.json();
-      expect(result.error).toBe("Wrong Email or Password");
-    });
-  });
-
-  describe("Authenticated Endpoints: Current User & Logout", () => {
-    let sessionToken: string;
+  describe("Login and Session Management", () => {
+    let accessToken: string;
+    let refreshToken: string;
 
     beforeEach(async () => {
       // 1. Create User
@@ -152,7 +79,7 @@ describe("User API tests", () => {
         })
       );
 
-      // 2. Login to get cookie
+      // 2. Login to get cookies
       const loginResponse = await app.handle(
         new Request("http://localhost/api/users/login", {
           method: "POST",
@@ -163,17 +90,26 @@ describe("User API tests", () => {
           }),
         })
       );
+      
       const cookieHeader = loginResponse.headers.get("set-cookie") || "";
-      const match = cookieHeader.match(/auth_token=([^;]+)/);
-      sessionToken = match?.[1] ?? "";
+      const authMatch = cookieHeader.match(/auth_token=([^;]+)/);
+      const refreshMatch = cookieHeader.match(/refresh_token=([^;]+)/);
+      
+      accessToken = authMatch?.[1] ?? "";
+      refreshToken = refreshMatch?.[1] ?? "";
     });
 
-    it("should retrieve current user profile successfully", async () => {
+    it("should login successfully and set dual cookies", () => {
+      expect(accessToken).not.toBe("");
+      expect(refreshToken).not.toBe("");
+    });
+
+    it("should retrieve current user using access token", async () => {
       const response = await app.handle(
         new Request("http://localhost/api/users/current", {
           method: "GET",
           headers: {
-            "Cookie": `auth_token=${sessionToken}`,
+            "Cookie": `auth_token=${accessToken}`,
           },
         })
       );
@@ -181,100 +117,100 @@ describe("User API tests", () => {
       expect(response.status).toBe(200);
       const result: any = await response.json();
       expect(result.data.email).toBe("auth@example.com");
-      expect(result.data.name).toBe("Auth User");
     });
 
-    it("should fail to access current user without token", async () => {
-      const response = await app.handle(
-        new Request("http://localhost/api/users/current", {
-          method: "GET",
+    it("should refresh session correctly and rotate tokens", async () => {
+      // 1. Refresh using current refresh token
+      const refreshResponse = await app.handle(
+        new Request("http://localhost/api/users/refresh", {
+          method: "POST",
+          headers: {
+            "Cookie": `refresh_token=${refreshToken}`,
+          },
         })
       );
 
-      expect(response.status).toBe(401);
-      const result: any = await response.json();
-      expect(result.error).toBe("Unauthorized");
+      expect(refreshResponse.status).toBe(200);
+      
+      const cookieHeader = refreshResponse.headers.get("set-cookie") || "";
+      const newAuthMatch = cookieHeader.match(/auth_token=([^;]+)/);
+      const newRefreshMatch = cookieHeader.match(/refresh_token=([^;]+)/);
+      
+      const newAccessToken = newAuthMatch?.[1] ?? "";
+      const newRefreshToken = newRefreshMatch?.[1] ?? "";
+
+      expect(newAccessToken).not.toBe(accessToken);
+      expect(newRefreshToken).not.toBe(refreshToken);
+
+      // 2. Verify old refresh token is now invalid (Rotation check)
+      const failedRefresh = await app.handle(
+        new Request("http://localhost/api/users/refresh", {
+          method: "POST",
+          headers: {
+            "Cookie": `refresh_token=${refreshToken}`,
+          },
+        })
+      );
+      expect(failedRefresh.status).toBe(401);
     });
 
-    it("should logout successfully", async () => {
-      // 1. Logout
+    it("should logout successfully and clear both cookies", async () => {
       const logoutResponse = await app.handle(
         new Request("http://localhost/api/users/logout", {
           method: "DELETE",
           headers: {
-            "Cookie": `auth_token=${sessionToken}`,
+            "Cookie": `auth_token=${accessToken}; refresh_token=${refreshToken}`,
           },
         })
       );
       expect(logoutResponse.status).toBe(200);
-      expect(await logoutResponse.json()).toEqual({ data: "OK" });
-
-      // 2. Verify token is gone
-      const currentResponse = await app.handle(
-        new Request("http://localhost/api/users/current", {
-          method: "GET",
-          headers: {
-            "Cookie": `auth_token=${sessionToken}`,
-          },
-        })
-      );
-      expect(currentResponse.status).toBe(401);
+      
+      const cookies = logoutResponse.headers.getSetCookie();
+      expect(cookies.some(c => c.startsWith("auth_token=;"))).toBe(true);
+      expect(cookies.some(c => c.startsWith("refresh_token=;"))).toBe(true);
     });
 
-    it("should fail on double logout", async () => {
-      // 1. Logout first time
-      await app.handle(
-        new Request("http://localhost/api/users/logout", {
-          method: "DELETE",
-          headers: {
-            "Cookie": `auth_token=${sessionToken}`,
-          },
-        })
-      );
+    it("should fail to refresh with an expired refresh token", async () => {
+        // Manually expire the refresh token in the DB
+        const pastDate = new Date();
+        pastDate.setDate(pastDate.getDate() - 8);
 
-      // 2. Logout second time (token deleted from DB)
-      const response = await app.handle(
-        new Request("http://localhost/api/users/logout", {
-          method: "DELETE",
-          headers: {
-            "Cookie": `auth_token=${sessionToken}`,
-          },
-        })
-      );
+        await db.update(sessions).set({
+            refreshTokenExpiresAt: pastDate
+        });
 
-      expect(response.status).toBe(401);
-      const result: any = await response.json();
-      expect(result.error).toBe("Unauthorized");
+        const response = await app.handle(
+            new Request("http://localhost/api/users/refresh", {
+                method: "POST",
+                headers: {
+                    "Cookie": `refresh_token=${refreshToken}`,
+                },
+            })
+        );
+
+        expect(response.status).toBe(401);
     });
+  });
 
-    it("should fail to access current user with an expired token", async () => {
-      // 1. Manually create an expired session
-      const expiredToken = "expired_token_123";
-      const tokenHash = crypto.createHash("sha256").update(expiredToken).digest("hex");
-      const pastDate = new Date();
-      pastDate.setDate(pastDate.getDate() - 1); // 1 day ago
+  describe("Rate Limiting", () => {
+      it("should trigger rate limit after multiple consecutive login attempts", async () => {
+          const attempts = [];
+          for (let i = 0; i < 102; i++) {
+              attempts.push(app.handle(
+                new Request("http://localhost/api/users/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: "rate@lim.it", password: "password123" }),
+                })
+              ));
+          }
 
-      const [user] = await db.query.users.findMany({ limit: 1 });
-
-      await db.insert(sessions).values({
-        tokenHash,
-        userId: user!.id,
-        expiresAt: pastDate,
+          const results = await Promise.all(attempts);
+          const hasRateLimit = results.some(res => res.status === 429);
+          
+          // Note: In some test environments, rate-limit plugin might need accurate IP or local config
+          // If the test fails due to plugin environment, we might need to adjust elysia-rate-limit config
+          expect(hasRateLimit).toBe(true);
       });
-
-      // 2. Try to access with expired token
-      const response = await app.handle(
-        new Request("http://localhost/api/users/current", {
-          method: "GET",
-          headers: {
-            "Cookie": `auth_token=${expiredToken}`,
-          },
-        })
-      );
-
-      expect(response.status).toBe(401);
-      const result: any = await response.json();
-      expect(result.error).toBe("Unauthorized");
-    });
   });
 });

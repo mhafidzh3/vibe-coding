@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { users, sessions } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { UnauthorizedError, BadRequestError, ConflictError } from "../lib/errors";
@@ -46,13 +46,12 @@ export const usersService = {
   },
 
   /**
-   * Authenticates user matching email and compares against stored bcrypt hash.
-   * Generates a secure, 32-byte hex token upon successful validation.
-   * Stores the generated SHA-256 token hash alongside a 7-day expiration boundary.
+   * Authenticates user and issues a dual-token payload (Access & Refresh).
+   * Implements secure hashing and separate expiration boundaries.
    *
    * @param payload Object containing email and plaintext password attempts
-   * @throws BadRequestError on invalid email match or password resolution failure
-   * @returns Raw token string utilized as Bearer for downstream requests
+   * @throws BadRequestError on invalid credentials
+   * @returns Raw tokens to be stored in HttpOnly cookies
    */
   async loginUser({ email, password }: LoginPayload) {
     const user = await db.query.users.findFirst({
@@ -68,28 +67,77 @@ export const usersService = {
       throw new BadRequestError("Wrong Email or Password");
     }
 
-    const rawToken = crypto.randomBytes(32).toString("hex");
-    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    // Access Token (15 mins)
+    const accessToken = crypto.randomBytes(32).toString("hex");
+    const accessTokenHash = crypto.createHash("sha256").update(accessToken).digest("hex");
+    const accessTokenExpiresAt = new Date();
+    accessTokenExpiresAt.setMinutes(accessTokenExpiresAt.getMinutes() + 15);
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    // Refresh Token (7 days)
+    const refreshToken = crypto.randomBytes(32).toString("hex");
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+    const refreshTokenExpiresAt = new Date();
+    refreshTokenExpiresAt.setDate(refreshTokenExpiresAt.getDate() + 7);
 
     await db.insert(sessions).values({
-      tokenHash,
+      tokenHash: accessTokenHash,
+      refreshTokenHash: refreshTokenHash,
       userId: user.id,
-      expiresAt,
+      expiresAt: accessTokenExpiresAt,
+      refreshTokenExpiresAt: refreshTokenExpiresAt,
     });
 
-    return { token: rawToken };
+    return { accessToken, refreshToken };
   },
 
   /**
-   * Retrieves comprehensive user profile payload.
-   * As isolation is managed by upstream middleware, this function acts purely
-   * to construct the response map for the verified active token's owner.
+   * Validates a refresh token, rotates it, and issues a new dual-token set.
+   * Implements Token Rotation for enhanced security.
    *
-   * @param user Pre-verified user reference injected by route guard
-   * @returns Unwrapped safe response structure containing user identifiers
+   * @param refreshToken The raw refresh token from the browser cookie
+   * @returns New set of tokens
+   */
+  async refreshSession(refreshToken: string) {
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+
+    const session = await db.query.sessions.findFirst({
+      where: and(
+        eq(sessions.refreshTokenHash, refreshTokenHash),
+        gt(sessions.refreshTokenExpiresAt, new Date())
+      ),
+    });
+
+    if (!session || !session.userId) {
+      throw new UnauthorizedError("Invalid or expired refresh token");
+    }
+
+    // Delete the old session before issuing new tokens (Rotation)
+    await db.delete(sessions).where(eq(sessions.id, session.id));
+
+    // Issue brand new tokens and session
+    const newAccessToken = crypto.randomBytes(32).toString("hex");
+    const newAccessTokenHash = crypto.createHash("sha256").update(newAccessToken).digest("hex");
+    const newAccessTokenExpiresAt = new Date();
+    newAccessTokenExpiresAt.setMinutes(newAccessTokenExpiresAt.getMinutes() + 15);
+
+    const newRefreshToken = crypto.randomBytes(32).toString("hex");
+    const newRefreshTokenHash = crypto.createHash("sha256").update(newRefreshToken).digest("hex");
+    const newRefreshTokenExpiresAt = new Date();
+    newRefreshTokenExpiresAt.setDate(newRefreshTokenExpiresAt.getDate() + 7);
+
+    await db.insert(sessions).values({
+      tokenHash: newAccessTokenHash,
+      refreshTokenHash: newRefreshTokenHash,
+      userId: session.userId,
+      expiresAt: newAccessTokenExpiresAt,
+      refreshTokenExpiresAt: newRefreshTokenExpiresAt,
+    });
+
+    return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+  },
+
+  /**
+   * Retrieves user profile for a verified session.
    */
   async getCurrentUser(user: typeof users.$inferSelect) {
     return {
@@ -103,12 +151,7 @@ export const usersService = {
   },
 
   /**
-   * Voids the active session record effectively revoking underlying authorization.
-   * Targets specific connection ID preventing mass-termination on multiple client layouts.
-   *
-   * @param sessionId Session PK extracted natively by route middleware
-   * @throws UnauthorizedError If session could not be found or removed effectively
-   * @returns Successful deletion object
+   * Voids the active session record.
    */
   async logoutUser(sessionId: number) {
     const result = await db.delete(sessions)
