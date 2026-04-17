@@ -1,35 +1,30 @@
 import { useState, useEffect, type ReactNode, useCallback } from "react";
 import { api } from "@/lib/eden";
-import { authStore } from "@/lib/auth";
 import { AuthContext, type User } from "./AuthContext";
 
 /**
  * AuthProvider wraps the entire app in <App />.
- * On mount, it checks if a token exists in localStorage and
- * attempts to fetch the current user's profile from the backend.
+ * On mount, it attempts to fetch the current user's profile from the backend.
+ * Authentication status is derived from the presence of a secure cookie.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   /**
-   * Fetch the current user profile using a stored token.
-   * If the request fails (401), the token is invalid — clear it.
+   * Fetch the current user profile.
+   * Authentication is handled automatically via HttpOnly cookies.
    */
-  const fetchCurrentUser = useCallback(async (token: string) => {
+  const fetchCurrentUser = useCallback(async () => {
     try {
-      const { data, error } = await api.api.users.current.get({
-        headers: { authorization: `Bearer ${token}` },
-      });
+      const { data, error } = await api.api.users.current.get();
 
       if (error) {
-        authStore.clearToken();
         setUser(null);
       } else {
         setUser(data.data as User);
       }
     } catch {
-      authStore.clearToken();
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -37,30 +32,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
-   * On mount: check if a token already exists (from a previous session).
-   * If yes, try to fetch the user profile.
-   * If the token is expired or invalid, clear it silently.
+   * On mount: attempt to fetch the user profile.
+   * If the auth_token cookie is present and valid, the user is logged in.
    */
   useEffect(() => {
-    const token = authStore.getToken();
-    if (token) {
-      // We don't await here because useEffect cannot be async
-      // and we handle setIsLoading(false) inside fetchCurrentUser
-      fetchCurrentUser(token);
-    } else {
-      setIsLoading(false);
-    }
+    fetchCurrentUser();
   }, [fetchCurrentUser]);
 
   /**
    * Log in with email and password.
-   * On success: store the token and fetch the user profile.
-   * On failure: return the error message.
+   * The backend sets an HttpOnly cookie on success.
    */
   const login = useCallback(
     async (email: string, password: string) => {
       try {
-        const { data, error } = await api.api.users.login.post({
+        const { error } = await api.api.users.login.post({
           email,
           password,
         });
@@ -71,9 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { success: false, error: errorMsg || "Login failed" };
         }
 
-        const token = data.data;
-        authStore.setToken(token);
-        await fetchCurrentUser(token);
+        await fetchCurrentUser();
 
         return { success: true };
       } catch {
@@ -88,8 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Register a new account.
-   * On success: return success (user still needs to log in separately).
-   * On failure: return the error message.
+   * On success: return success.
    */
   const register = useCallback(
     async (name: string, email: string, password: string) => {
@@ -118,21 +101,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   /**
-   * Log out: tell the backend to invalidate the session, then clear local state.
+   * Log out: tell the backend to clear the cookie, then clear local state.
    */
   const logout = useCallback(async () => {
-    const token = authStore.getToken();
-    if (token) {
-      try {
-        await api.api.users.logout.delete({
-          headers: { authorization: `Bearer ${token}` },
-        });
-      } catch {
-        // Even if the backend call fails, we still clear locally
-      }
+    try {
+      await api.api.users.logout.delete();
+    } catch {
+      // Ignore errors on logout
     }
 
-    authStore.clearToken();
     setUser(null);
   }, []);
 

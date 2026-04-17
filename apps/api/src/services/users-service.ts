@@ -80,7 +80,7 @@ export const usersService = {
       expiresAt,
     });
 
-    return { data: rawToken };
+    return { token: rawToken };
   },
 
   /**

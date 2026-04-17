@@ -26,7 +26,7 @@ describe("User API tests", () => {
       );
 
       expect(response.status).toBe(200);
-      const result = await response.json();
+      const result: any = await response.json();
       expect(result).toEqual({ data: "OK" });
     });
 
@@ -58,7 +58,7 @@ describe("User API tests", () => {
       );
 
       expect(response.status).toBe(400);
-      const result = await response.json();
+      const result: any = await response.json();
       expect(result.error).toBe("Email already registered");
     });
 
@@ -76,7 +76,7 @@ describe("User API tests", () => {
       );
 
       expect(response.status).toBe(400);
-      const result = await response.json();
+      const result: any = await response.json();
       expect(result.error).toBe("Validation failed");
     });
   });
@@ -97,7 +97,7 @@ describe("User API tests", () => {
       );
     });
 
-    it("should login successfully and return a token", async () => {
+    it("should login successfully and set a cookie", async () => {
       const response = await app.handle(
         new Request("http://localhost/api/users/login", {
           method: "POST",
@@ -110,9 +110,11 @@ describe("User API tests", () => {
       );
 
       expect(response.status).toBe(200);
-      const result = await response.json();
-      expect(result.data).toBeDefined();
-      expect(typeof result.data).toBe("string");
+      const result: any = await response.json();
+      expect(result.message).toBe("Login successful");
+      const cookie = response.headers.get("set-cookie");
+      expect(cookie).toContain("auth_token=");
+      expect(cookie).toContain("HttpOnly");
     });
 
     it("should fail with wrong password", async () => {
@@ -128,7 +130,7 @@ describe("User API tests", () => {
       );
 
       expect(response.status).toBe(400);
-      const result = await response.json();
+      const result: any = await response.json();
       expect(result.error).toBe("Wrong Email or Password");
     });
   });
@@ -150,7 +152,7 @@ describe("User API tests", () => {
         })
       );
 
-      // 2. Login to get token
+      // 2. Login to get cookie
       const loginResponse = await app.handle(
         new Request("http://localhost/api/users/login", {
           method: "POST",
@@ -161,8 +163,9 @@ describe("User API tests", () => {
           }),
         })
       );
-      const loginResult = await loginResponse.json();
-      sessionToken = loginResult.data;
+      const cookieHeader = loginResponse.headers.get("set-cookie") || "";
+      const match = cookieHeader.match(/auth_token=([^;]+)/);
+      sessionToken = match?.[1] ?? "";
     });
 
     it("should retrieve current user profile successfully", async () => {
@@ -170,13 +173,13 @@ describe("User API tests", () => {
         new Request("http://localhost/api/users/current", {
           method: "GET",
           headers: {
-            "Authorization": `Bearer ${sessionToken}`,
+            "Cookie": `auth_token=${sessionToken}`,
           },
         })
       );
 
       expect(response.status).toBe(200);
-      const result = await response.json();
+      const result: any = await response.json();
       expect(result.data.email).toBe("auth@example.com");
       expect(result.data.name).toBe("Auth User");
     });
@@ -189,7 +192,7 @@ describe("User API tests", () => {
       );
 
       expect(response.status).toBe(401);
-      const result = await response.json();
+      const result: any = await response.json();
       expect(result.error).toBe("Unauthorized");
     });
 
@@ -199,7 +202,7 @@ describe("User API tests", () => {
         new Request("http://localhost/api/users/logout", {
           method: "DELETE",
           headers: {
-            "Authorization": `Bearer ${sessionToken}`,
+            "Cookie": `auth_token=${sessionToken}`,
           },
         })
       );
@@ -211,7 +214,7 @@ describe("User API tests", () => {
         new Request("http://localhost/api/users/current", {
           method: "GET",
           headers: {
-            "Authorization": `Bearer ${sessionToken}`,
+            "Cookie": `auth_token=${sessionToken}`,
           },
         })
       );
@@ -224,7 +227,7 @@ describe("User API tests", () => {
         new Request("http://localhost/api/users/logout", {
           method: "DELETE",
           headers: {
-            "Authorization": `Bearer ${sessionToken}`,
+            "Cookie": `auth_token=${sessionToken}`,
           },
         })
       );
@@ -234,13 +237,13 @@ describe("User API tests", () => {
         new Request("http://localhost/api/users/logout", {
           method: "DELETE",
           headers: {
-            "Authorization": `Bearer ${sessionToken}`,
+            "Cookie": `auth_token=${sessionToken}`,
           },
         })
       );
 
       expect(response.status).toBe(401);
-      const result = await response.json();
+      const result: any = await response.json();
       expect(result.error).toBe("Unauthorized");
     });
 
@@ -255,7 +258,7 @@ describe("User API tests", () => {
 
       await db.insert(sessions).values({
         tokenHash,
-        userId: user.id,
+        userId: user!.id,
         expiresAt: pastDate,
       });
 
@@ -264,13 +267,13 @@ describe("User API tests", () => {
         new Request("http://localhost/api/users/current", {
           method: "GET",
           headers: {
-            "Authorization": `Bearer ${expiredToken}`,
+            "Cookie": `auth_token=${expiredToken}`,
           },
         })
       );
 
       expect(response.status).toBe(401);
-      const result = await response.json();
+      const result: any = await response.json();
       expect(result.error).toBe("Unauthorized");
     });
   });
