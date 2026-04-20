@@ -9,6 +9,28 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # Force actions runner to Node 24 (opt-in) and configure DB connectivity
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      DATABASE_URL: postgres://postgres:password@localhost:5432/vibe-coding
+
+    # Spin up ephemeral PostgreSQL instance
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: vibe-coding
+        ports:
+          - 5432:5432
+        # Healthcheck ensures the DB is ready before test steps begin
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout repository
@@ -24,6 +46,9 @@ jobs:
 
       - name: Lint
         run: bun run lint
+
+      - name: Push Database Schema
+        run: bun run --filter @vibe/api db:push
 
       - name: Run tests
         run: bun run test
