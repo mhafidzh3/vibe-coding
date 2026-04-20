@@ -2,7 +2,7 @@ import { Elysia, t, type Static } from "elysia";
 import { usersService } from "../services/users-service";
 import { UnauthorizedError } from "../lib/errors";
 import { db } from "../db";
-import { sessions, users } from "../db/schema";
+import { sessions } from "../db/schema";
 import { eq, and, gt } from "drizzle-orm";
 import crypto from "crypto";
 import { rateLimit } from "elysia-rate-limit";

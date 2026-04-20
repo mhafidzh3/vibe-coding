@@ -13,7 +13,7 @@ export function ErrorFallback({
   error,
   resetErrorBoundary,
 }: {
-  error: Error;
+  error: any;
   resetErrorBoundary: () => void;
 }) {
   return (
