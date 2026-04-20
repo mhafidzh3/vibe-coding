@@ -11,10 +11,10 @@ import { ErrorFallback } from "@/components/ErrorFallback";
 import { DashboardSkeleton } from "@/components/DashboardSkeleton";
 
 // Page components are lazily loaded to enable route-level code splitting
-const LoginPage = lazy(() => import("@/pages/LoginPage"));
-const RegisterPage = lazy(() => import("@/pages/RegisterPage"));
-const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
-const NotFoundPage = lazy(() => import("@/pages/NotFoundPage"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const RegisterPage = lazy(() => import("./pages/RegisterPage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 function AppRoutes() {
   const { isLoading } = useAuth();
