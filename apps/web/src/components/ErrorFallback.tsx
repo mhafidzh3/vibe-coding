@@ -9,13 +9,13 @@ import {
 } from "@/components/ui/card";
 import { AlertCircle, RefreshCcw } from "lucide-react";
 
+import type { FallbackProps } from "react-error-boundary";
+
 export function ErrorFallback({
   error,
   resetErrorBoundary,
-}: {
-  error: any;
-  resetErrorBoundary: () => void;
-}) {
+}: FallbackProps) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md shadow-lg border-destructive/50">
@@ -30,7 +30,7 @@ export function ErrorFallback({
         </CardHeader>
         <CardContent>
           <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive break-words overflow-auto max-h-32">
-            {error.message}
+            {errorMessage}
           </div>
         </CardContent>
         <CardFooter className="flex justify-center">
