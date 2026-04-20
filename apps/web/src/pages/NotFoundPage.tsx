@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 
 export default function NotFoundPage() {
+  // Cache invalidation comment
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
       {/* App branding */}
